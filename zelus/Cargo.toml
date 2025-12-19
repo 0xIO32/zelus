@@ -44,10 +44,10 @@ http = "1"
 futures-util = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "charset"] }
 tokio-util = { version = "0.7", features = ["io-util"] }
-bytes = "1.10"
+bytes = "1.11"
 tokio = "1"
-pastey = "0.1"
-axum-extra = { version = "0.10", features = ["typed-header"] }
+pastey = "0.2"
+axum-extra = { version = "0.12", features = ["typed-header"] }
 serde = "1.0"
 serde_json = "1.0"
 async-trait = "0.1"
@@ -62,7 +62,7 @@ tower-service = "0.3"
 
 # Let the user of this crate decide the version
 sqlx = { version = "*", optional = true }
-redis = { version = "1.0.0-alpha", optional = true }
+redis = { version = "1.0.1", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }

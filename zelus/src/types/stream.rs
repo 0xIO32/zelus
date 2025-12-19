@@ -31,7 +31,6 @@ impl DataStream {
         Self::Stream(Box::pin(stream))
     }
 
-    #[must_use]
     pub fn into_axum(self) -> axum::body::Body {
         match self {
             Self::Axum(stream) => axum::body::Body::from_stream(stream),
