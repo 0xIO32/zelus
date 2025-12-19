@@ -15,7 +15,7 @@ define_error!(category {
 #[service]
 impl ExampleService for Base {
     #[route("/", method = GET, no_auth)]
-    #[error(category(error1 [io:*] error2 [io:NotFound]))]
+    #[error(category::{error1 <- [io:*], error2 <- [io:NotFound]})]
     async fn example(&self) -> Result<(), _> {
         if false {
             Err(io::Error::new(ErrorKind::NotFound, "io not found error").into()) // This will be converted into a ExampleError::Error2

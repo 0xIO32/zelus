@@ -31,7 +31,7 @@ impl IntoRequestParts for SpecialVariable {
 #[service]
 trait ExampleService {
     #[route("/", method = GET, no_auth)]
-    #[error(special(test))]
+    #[error(special::test)]
     async fn example(&self, #[special] special_variable: SpecialVariable) -> Result<(), _>;
 }
 

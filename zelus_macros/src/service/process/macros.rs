@@ -186,7 +186,7 @@ pub fn process(
 
                 let mut args = TokenStream::new();
                 if !route_args.no_auth {
-                    args.extend(quote! { , auth(invalid) });
+                    args.extend(quote! { , auth::invalid });
                 }
                 if !group.stream().is_empty() {
                     args.extend(quote! { , });

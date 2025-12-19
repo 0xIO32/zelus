@@ -6,7 +6,7 @@ define_error!(category {
     error2 ("This is the error message for error2" IM_A_TEAPOT),
 });
 
-error!(StandaloneError, category(error1 error2));
+error!(StandaloneError, category::{error1, error2});
 
 #[service]
 trait ExampleService1 {

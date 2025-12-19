@@ -9,14 +9,14 @@ define_error!(category {
 #[service]
 trait ExampleService1 {
     #[route("/", method = GET, no_auth)]
-    #[error(category(error1 error2))]
+    #[error(category::{error1, error2})]
     async fn example1(&self) -> Result<(), _>;
 }
 
 #[service]
 trait ExampleService2 {
     #[route("/", method = GET, no_auth)]
-    #[error(category(error2))]
+    #[error(category::error2)]
     async fn example2(&self) -> Result<(), _>;
 }
 

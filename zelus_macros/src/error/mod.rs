@@ -7,7 +7,7 @@ use proc_macro2::{Delimiter, Group, Ident, Punct, Span, TokenStream, TokenTree};
 use quote::quote;
 use std::collections::{HashMap, HashSet};
 use syn::parse::{Parse, ParseStream};
-use syn::token::{Brace, Bracket};
+use syn::token::{Brace, Paren};
 use syn::{LitStr, Token};
 
 // Taken from https://stackoverflow.com/a/73727708
@@ -44,7 +44,6 @@ const INVISIBLE_CHARS: [char; INVISIBLE_CHARS_HEX.len()] = {
     chars
 };
 
-type ErrorAttributes = Vec<(Ident, Span, Option<Ident>)>;
 type ErrorInner = Either<(Ident, Ident, LitStr), (Ident, Ident)>;
 
 pub struct ErrorContent {
@@ -58,36 +57,49 @@ impl Parse for ErrorContent {
         let ident: Ident = input.parse()?;
 
         while !input.is_empty() {
-            if input.peek(Token![,]) {
-                let _: Punct = input.parse()?;
+            let _: Token![,] = input.parse()?;
+            if input.is_empty() {
+                break;
             }
             if input.peek(syn::Ident) {
                 let category: Ident = input.parse()?;
-                let content: Group = input.parse()?;
-                if content.delimiter() != Delimiter::Parenthesis {
-                    return Err(syn::Error::new(content.span(), "Expected parenthesis"));
+                let _: Token![::] = input.parse()?;
+                if input.peek(Brace) {
+                    let group: Group = input.parse()?;
+                    let content: ErrorCategoryContent = syn::parse2(group.stream())?;
+                    for (ident, attributes) in content.vec {
+                        errors.push((Either::Right((category.clone(), ident)), attributes));
+                    }
+                } else if input.peek(syn::Ident) {
+                    let ident: Ident = input.parse()?;
+                    let attributes: ErrorAttributes = input.parse()?;
+                    errors.push((Either::Right((category, ident)), attributes));
+                } else {
+                    let token: TokenTree = input.parse()?;
+                    return Err(syn::Error::new(
+                        token.span(),
+                        "Expected identifier or braces",
+                    ));
                 }
-                let content: ErrorCategoryContent = syn::parse2(content.stream())?;
-                for (error, attributes) in content.vec {
-                    errors.push((Either::Right((category.clone(), error)), attributes));
-                }
-            } else if input.peek(Brace) {
+            } else if input.peek(Paren) {
                 let custom: Group = input.parse()?;
                 let content: ErrorCustomContent = syn::parse2(custom.stream())?;
-                for (error, statuscode, description, attributes) in content.vec {
-                    errors.push((Either::Left((error, statuscode, description)), attributes));
-                }
+                let attributes: ErrorAttributes = input.parse()?;
+                errors.push((
+                    Either::Left((content.ident, content.statuscode, content.description)),
+                    attributes,
+                ));
             } else {
                 let token: TokenTree = input.parse()?;
                 return Err(syn::Error::new(
                     token.span(),
-                    "Expected identifier or braces",
+                    "Expected identifier or brackets",
                 ));
             }
+        }
 
-            if input.peek(Token![,]) {
-                let _: Punct = input.parse()?;
-            }
+        if input.peek(Token![,]) {
+            let _: Punct = input.parse()?;
         }
 
         Ok(Self { errors, ident })
@@ -102,16 +114,21 @@ impl Parse for ErrorCategoryContent {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut vec = Vec::new();
 
+        let mut first = true;
+
         while !input.is_empty() {
-            let error: Ident = input.parse()?;
-            let attributes = if input.peek(Bracket) {
-                let group: Group = input.parse()?;
-                let attributes: ErrorAttributesContent = syn::parse2(group.stream())?;
-                attributes.vec
-            } else {
-                Vec::new()
-            };
-            vec.push((error, attributes));
+            if !first {
+                let _: Token![,] = input.parse()?;
+            }
+            first = false;
+
+            let ident: Ident = input.parse()?;
+            let attributes: ErrorAttributes = input.parse()?;
+            vec.push((ident, attributes));
+        }
+
+        if input.peek(Token![,]) {
+            let _: Token![,] = input.parse()?;
         }
 
         Ok(Self { vec })
@@ -119,35 +136,41 @@ impl Parse for ErrorCategoryContent {
 }
 
 pub struct ErrorCustomContent {
-    pub vec: Vec<(Ident, Ident, LitStr, ErrorAttributes)>,
+    pub ident: Ident,
+    pub description: LitStr,
+    pub statuscode: Ident,
 }
 
 impl Parse for ErrorCustomContent {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut vec = Vec::new();
+        let ident: Ident = input.parse()?;
+        let _: Token![,] = input.parse()?;
+        let description: LitStr = input.parse()?;
+        let _: Token![,] = input.parse()?;
+        let statuscode: Ident = input.parse()?;
+        Ok(Self {
+            ident,
+            description,
+            statuscode,
+        })
+    }
+}
 
-        while !input.is_empty() {
-            if input.peek(Token![,]) {
-                let _: Punct = input.parse()?;
-            }
-            let error: Ident = input.parse()?;
-            let description: LitStr = input.parse()?;
-            let statuscode: Ident = input.parse()?;
-            let attributes = if input.peek(Bracket) {
-                let group: Group = input.parse()?;
-                let attributes: ErrorAttributesContent = syn::parse2(group.stream())?;
-                attributes.vec
-            } else {
-                Vec::new()
-            };
-            vec.push((error, statuscode, description, attributes));
+pub struct ErrorAttributes(Vec<(Ident, Span, Option<Ident>)>);
 
-            if input.peek(Token![,]) {
-                let _: Punct = input.parse()?;
+impl Parse for ErrorAttributes {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        if input.peek(Token!(<-)) {
+            let _: Token![<-] = input.parse()?;
+            let attributes: Group = input.parse()?;
+            if attributes.delimiter() != Delimiter::Bracket {
+                return Err(syn::Error::new(attributes.span(), "Expected brackets"));
             }
+            let content: ErrorAttributesContent = syn::parse2(attributes.stream())?;
+            Ok(Self(content.vec))
+        } else {
+            Ok(Self(Vec::new()))
         }
-
-        Ok(Self { vec })
     }
 }
 
@@ -159,12 +182,15 @@ impl Parse for ErrorAttributesContent {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut vec = Vec::new();
 
+        let mut first = true;
+
         while !input.is_empty() {
-            let key: Ident = input.parse()?;
-            let punct: Punct = input.parse()?;
-            if punct.as_char() != ':' {
-                return Err(syn::Error::new(punct.span(), "Expected :"));
+            if !first {
+                let _: Token![,] = input.parse()?;
             }
+            first = false;
+            let key: Ident = input.parse()?;
+            let _: Token![:] = input.parse()?;
             if input.peek(Token![*]) {
                 let value: Punct = input.parse()?;
                 vec.push((key, value.span(), None));
@@ -172,6 +198,9 @@ impl Parse for ErrorAttributesContent {
                 let value: Ident = input.parse()?;
                 vec.push((key, value.span(), Some(value)));
             }
+        }
+        if input.peek(Token![,]) {
+            let _: Token![,] = input.parse()?;
         }
 
         Ok(Self { vec })
@@ -196,7 +225,7 @@ pub fn error0(crate_prefix: &TokenStream, input: TokenStream) -> syn::Result<Tok
                 Ident::new("BAD_REQUEST", Span::call_site()),
                 LitStr::new("Invalid Request/Response", Span::call_site()),
             )),
-            Vec::new(),
+            ErrorAttributes(Vec::new()),
         ),
     );
 
@@ -331,7 +360,7 @@ pub fn error0(crate_prefix: &TokenStream, input: TokenStream) -> syn::Result<Tok
             }
         };
 
-        for (attr, key_span, key) in &attributes {
+        for (attr, key_span, key) in &attributes.0 {
             if key.is_none() {
                 if attributes_parsed.contains_key(&attr.to_string()) {
                     return Err(syn::Error::new(
@@ -349,7 +378,7 @@ pub fn error0(crate_prefix: &TokenStream, input: TokenStream) -> syn::Result<Tok
         errors2.push((attributes, entry));
     }
     for (attributes, entry) in errors2 {
-        for (attr, _key_span, key) in attributes {
+        for (attr, _key_span, key) in attributes.0 {
             let Some(key) = key else {
                 continue;
             };

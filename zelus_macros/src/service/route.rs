@@ -159,10 +159,6 @@ fn parse_route_args_option(
 
 fn parse_query_arg(stream: ParseStream) -> Result<(Ident, Option<LitStr>), syn::Error> {
     let arg: Ident = stream.parse()?;
-    #[expect(
-        clippy::if_then_some_else_none,
-        reason = "False positive. It does have a question-mark"
-    )]
     let desc = if stream.peek(syn::LitStr) {
         Some(stream.parse()?)
     } else {
