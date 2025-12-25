@@ -13,26 +13,6 @@ sqlx = ["zelus_macros/sqlx", "dep:sqlx"]
 io = ["zelus_macros/io"]
 redis = ["zelus_macros/redis", "dep:redis"]
 
-# Reqwest features
-http2 = ["reqwest/http2"]
-
-default-tls = ["reqwest/default-tls"]
-
-native-tls = ["reqwest/native-tls"]
-native-tls-alpn = ["reqwest/native-tls-alpn"]
-native-tls-vendored = ["reqwest/native-tls-vendored"]
-
-rustls-tls = ["reqwest/rustls-tls"]
-rustls-tls-no-provider = ["reqwest/rustls-tls-no-provider"]
-
-rustls-tls-manual-roots-no-provider = ["reqwest/rustls-tls-manual-roots-no-provider"]
-rustls-tls-webpki-roots-no-provider = ["reqwest/rustls-tls-webpki-roots-no-provider"]
-rustls-tls-native-roots-no-provider = ["reqwest/rustls-tls-native-roots-no-provider"]
-
-rustls-tls-manual-roots = ["reqwest/rustls-tls-manual-roots"]
-rustls-tls-webpki-roots = ["reqwest/rustls-tls-webpki-roots"]
-rustls-tls-native-roots = ["reqwest/rustls-tls-native-roots"]
-
 [lints]
 workspace = true
 
@@ -42,7 +22,7 @@ axum = { version = "0.8", features = ["ws"] }
 utoipa = "5"
 http = "1"
 futures-util = "0.3"
-reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "charset"] }
+reqwest = { version = "0.13.0-rc.1", default-features = false, features = ["json", "stream", "charset"] }
 tokio-util = { version = "0.7", features = ["io-util"] }
 bytes = "1.11"
 tokio = "1"
