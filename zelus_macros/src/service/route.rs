@@ -48,7 +48,7 @@ impl Parse for RouteArgs {
         }
 
         routes.push(Ident::new(
-            if no_auth { "with_auth" } else { "without_auth" },
+            if !no_auth { "with_auth" } else { "without_auth" },
             Span::call_site(),
         ));
 
