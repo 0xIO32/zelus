@@ -3,7 +3,6 @@ use crate::responses::DocumentedResultResponse;
 use crate::utils::MaybeUnit;
 use std::collections::HashMap;
 use utoipa::ToSchema;
-use utoipa::openapi::schema::RefBuilder;
 use utoipa::openapi::{Content, RefOr, Response, ResponsesBuilder, Schema};
 
 impl<V: ToSchema + MaybeUnit + 'static> DocumentedResultResponse for V {
@@ -17,20 +16,18 @@ impl<V: ToSchema + MaybeUnit + 'static> DocumentedResultResponse for V {
                 Response::builder().description(SUCCESS_DESCRIPTION).build(),
             )
         } else {
+            let response_schema = V::schema();
             let mut vals = Vec::new();
-            vals.push((V::name().to_string(), V::schema()));
+            if matches!(response_schema, RefOr::Ref(_)) {
+                vals.push((V::name().to_string(), V::schema()));
+            }
             V::schemas(&mut vals);
             schemas.extend(vals);
             responses.response(
                 "200",
                 Response::builder()
                     .description(SUCCESS_DESCRIPTION)
-                    .content(
-                        "application/json",
-                        Content::new(Some(
-                            RefBuilder::new().ref_location_from_schema_name(V::name()),
-                        )),
-                    )
+                    .content("application/json", Content::new(Some(response_schema)))
                     .build(),
             )
         }
