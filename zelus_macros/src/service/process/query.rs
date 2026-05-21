@@ -12,7 +12,7 @@ pub fn process(
     http_args: &mut TokenStream,
     func_args: &mut Vec<TokenStream>,
     operations: &mut TokenStream,
-    schema_extra: &mut TokenStream,
+    _schema_extra: &mut TokenStream,
     client_def_body: &mut TokenStream,
     fn_def_args: &mut TokenStream,
     fn_def_call: &mut TokenStream,
@@ -71,7 +71,7 @@ pub fn process(
             } else {
                 quote! {
                     .schema(Some(
-                                < #arg_type as #crate_prefix utoipa::PartialSchema >::schema()
+                                #crate_prefix utoipa::schema!(#[inline] #arg_type)
                     ))
                 }
             };
@@ -86,15 +86,6 @@ pub fn process(
                     #schema_if,
                 );
             });
-            if !no_schema {
-                schema_extra.extend(quote! {
-                    schemas.insert(< #arg_type as #crate_prefix utoipa::ToSchema >::name().to_string(), < #arg_type as #crate_prefix utoipa::PartialSchema >::schema());
-                    let mut schemas_vec = Vec::new();
-                    < #arg_type as #crate_prefix utoipa::ToSchema >::schemas(&mut schemas_vec);
-                    schemas.extend(schemas_vec);
-                });
-            }
-
             fn_def_args.extend(quote! { #arg_name: #arg_type, });
             fn_def_call.extend(quote! { #arg_name, });
 
