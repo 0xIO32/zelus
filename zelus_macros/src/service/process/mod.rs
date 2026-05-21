@@ -343,8 +343,11 @@ pub fn process(
     path::process(
         emitter,
         crate_prefix,
+        trait_ident,
+        &fn_ident,
         (&path, path_span),
         &fn_args_identified,
+        routes,
         &mut http_args,
         &mut func_args,
         &mut operations,
