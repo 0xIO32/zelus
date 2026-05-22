@@ -6,6 +6,7 @@ use syn::LitStr;
 
 pub fn process(
     crate_prefix: &TokenStream,
+    trait_ident: &Ident,
     fn_ident: &Ident,
     fn_args_identified: &[FunctionArgument],
     routes: &mut TokenStream,
@@ -50,6 +51,8 @@ pub fn process(
         let mut query_fields = TokenStream::new();
         let mut query_names = TokenStream::new();
 
+        let mut query_schema_fields = TokenStream::new();
+
         for (arg_name, arg_type, required, desc, no_schema) in fn_args_query {
             query_fields.extend(quote! {
                 #arg_name: #arg_type,
@@ -69,9 +72,20 @@ pub fn process(
             let schema_if = if no_schema {
                 TokenStream::new()
             } else {
+                query_schema_fields.extend(quote! {
+                    #arg_name: #arg_type,
+                });
+                let arg_name_lit = LitStr::new(&arg_name.to_string(), arg_name.span());
+
                 quote! {
                     .schema(Some(
-                                < #arg_type as #crate_prefix utoipa::PartialSchema >::schema()
+                        {
+                            let #crate_prefix utoipa::openapi::Schema::Object(obj) = #crate_prefix utoipa::openapi::schema::Schema::from(< [< __ #trait_ident:snake _zelus_routes >]::[< #fn_ident:camel QuerySchema >] as #crate_prefix utoipa::PartialSchema >::schema())
+                                else {
+                                 unreachable!();
+                            };
+                            obj.properties.get(#arg_name_lit).expect("schema not generated").clone()
+                        }
                     ))
                 }
             };
@@ -86,14 +100,6 @@ pub fn process(
                     #schema_if,
                 );
             });
-            if !no_schema {
-                schema_extra.extend(quote! {
-                    schemas.insert(< #arg_type as #crate_prefix utoipa::ToSchema >::name().to_string(), < #arg_type as #crate_prefix utoipa::PartialSchema >::schema());
-                    let mut schemas_vec = Vec::new();
-                    < #arg_type as #crate_prefix utoipa::ToSchema >::schemas(&mut schemas_vec);
-                    schemas.extend(schemas_vec);
-                });
-            }
 
             fn_def_args.extend(quote! { #arg_name: #arg_type, });
             fn_def_call.extend(quote! { #arg_name, });
@@ -116,7 +122,19 @@ pub fn process(
             pub(crate) struct [< #fn_ident:camel Query >] {
                 #query_fields
             }
+
+            #[derive(#crate_prefix utoipa::ToSchema)]
+            pub(crate) struct [< #fn_ident:camel QuerySchema >] {
+                #query_schema_fields
+            }
         });
+
+        schema_extra.extend(quote! {
+            let mut schemas_vec = Vec::new();
+            < [< __ #trait_ident:snake _zelus_routes >]::[< #fn_ident:camel QuerySchema >] as #crate_prefix utoipa::ToSchema >::schemas(&mut schemas_vec);
+            schemas.extend(schemas_vec);
+        });
+
         http_args.extend(quote! {
                 #crate_prefix axum::extract::Query(
                     [< #fn_ident:camel Query >] { #query_names }

@@ -359,6 +359,7 @@ pub fn process(
 
     query::process(
         crate_prefix,
+        trait_ident,
         &fn_ident,
         &fn_args_identified,
         routes,
