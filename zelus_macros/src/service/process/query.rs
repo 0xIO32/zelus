@@ -124,6 +124,8 @@ pub fn process(
             }
 
             #[derive(#crate_prefix utoipa::ToSchema)]
+            #[allow(dead_code)]
+            #[automatically_derived]
             pub(crate) struct [< #fn_ident:camel QuerySchema >] {
                 #query_schema_fields
             }

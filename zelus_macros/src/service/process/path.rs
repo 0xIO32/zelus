@@ -98,6 +98,8 @@ pub fn process(
 
         routes.extend(quote! {
             #[derive(#crate_prefix utoipa::ToSchema)]
+            #[allow(dead_code)]
+            #[automatically_derived]
             pub(crate) struct [< #fn_ident:camel PathSchema >] {
                 #path_schema_fields
             }
