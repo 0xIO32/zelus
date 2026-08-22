@@ -2,26 +2,26 @@ use crate::SUCCESS_DESCRIPTION;
 use crate::responses::DocumentedResultResponse;
 use crate::types::DataStream;
 use axum::response::IntoResponse;
+use axum_extra::headers::{ContentLength, HeaderMapExt};
 use futures_util::TryStreamExt as _;
-use http::HeaderMap;
 use std::collections::HashMap;
 use std::io;
 use utoipa::openapi::{Content, RefOr, Response, ResponsesBuilder, Schema};
 
-pub struct FileResponse(pub Option<HeaderMap>, pub DataStream); // TODO: Add content type as parameter, when https://github.com/rust-lang/rust/issues/95174 is stable
+pub struct FileResponse(pub DataStream); // TODO: Add content type as parameter, when https://github.com/rust-lang/rust/issues/95174 is stable
 
 impl From<reqwest::Response> for FileResponse {
     fn from(value: reqwest::Response) -> Self {
-        Self(
-            Some(value.headers().clone()),
-            DataStream::by_stream(value.bytes_stream().map_err(io::Error::other)),
-        )
+        Self(DataStream::by_stream(
+            value.headers().typed_get::<ContentLength>(),
+            value.bytes_stream().map_err(io::Error::other),
+        ))
     }
 }
 
 impl IntoResponse for FileResponse {
     fn into_response(self) -> axum::response::Response {
-        (self.0, self.1.into_axum()).into_response()
+        self.0.into_axum()
     }
 }
 

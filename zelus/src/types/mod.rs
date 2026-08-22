@@ -3,7 +3,7 @@ mod jsonvec;
 mod stream;
 
 pub use jsonvec::JsonVec;
-pub use stream::DataStream;
+pub use stream::{DataStream, DatastreamReqwestExt};
 use utoipa::openapi::path::OperationBuilder;
 
 pub trait DocumentedType {

@@ -15,6 +15,7 @@ define_error!(special {
 
 impl<E: FromSpecialTest> FromRequestParts<E> for SpecialVariable {
     async fn from_request_parts(_parts: &mut Parts) -> Result<Self, E> {
+        tokio::task::yield_now().await;
         Ok(Self)
     }
 }
@@ -24,6 +25,7 @@ impl DocumentedType for SpecialVariable {} // If you want to modify documentatio
 // This is not required, if you set "no_sdk" in the service options
 impl IntoRequestParts for SpecialVariable {
     async fn into_request(self, req: RequestBuilder) -> RequestBuilder {
+        tokio::task::yield_now().await;
         req
     }
 }
