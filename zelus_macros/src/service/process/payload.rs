@@ -71,7 +71,8 @@ pub fn process(
             });
 
             client_impl_body.extend(quote! {
-                request = request.body(#arg_name.into_reqwest());
+                use #crate_prefix types::DatastreamReqwestExt as _;
+                request = request.datastream(#arg_name);
             });
         } else {
             http_args.extend(quote! {
