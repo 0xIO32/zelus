@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-use axum::body::{Body, BodyDataStream};
+use axum::body::BodyDataStream;
 use axum::extract::{FromRequest, Request};
 use axum::response::IntoResponse;
 use axum_extra::headers::{ContentLength, HeaderMapExt};
@@ -53,11 +53,6 @@ impl DataStream {
         Self::Stream(Box::pin(stream), length)
     }
 
-    #[must_use]
-    pub fn into_axum(self) -> axum::response::Response<Body> {
-        (self.header(), self.into_axum_body()).into_response()
-    }
-
     pub fn into_axum_body(self) -> axum::body::Body {
         match self {
             Self::Axum(stream, _) => axum::body::Body::from_stream(stream),
@@ -95,6 +90,12 @@ impl<S: Send + Sync> FromRequest<S> for DataStream {
     ) -> impl Future<Output = Result<Self, Self::Rejection>> {
         let length = req.headers().typed_get::<ContentLength>();
         std::future::ready(Ok(Self::Axum(req.into_body().into_data_stream(), length)))
+    }
+}
+
+impl IntoResponse for DataStream {
+    fn into_response(self) -> axum::response::Response {
+        (self.header(), self.into_axum_body()).into_response()
     }
 }
 
