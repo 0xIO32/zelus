@@ -1,5 +1,5 @@
 [workspace]
-members = ["zelus", "zelus_macros"]
+members = ["zelus", "zelus_keys", "zelus_macros"]
 resolver = "3"
 
 [workspace.dependencies]

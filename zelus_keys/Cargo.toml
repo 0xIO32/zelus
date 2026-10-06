@@ -1,0 +1,43 @@
+[package]
+name = "zelus_keys"
+version = "0.1.0"
+edition = "2024"
+authors = ["Markus Probst <markus.probst@posteo.de>"]
+license = "AGPL-3.0-only"
+
+[features]
+default = ["server"]
+server = [
+    "dep:axum",
+    "dep:axum-server",
+    "dep:futures-util",
+    "dep:tokio",
+    "dep:tokio-rustls",
+    "dep:tower-layer",
+]
+
+[lints]
+workspace = true
+
+[dependencies]
+asn1-rs = "0.7.2"
+ed25519-dalek = { version = "3.0.0", features = ["pkcs8", "pem"] }
+pem = "4.0.0"
+rcgen = { version = "0.14.9", default-features = false, features = ["crypto", "pem", "x509-parser", "aws_lc_rs"] }
+rustls = "0.23"
+thiserror = "2.0"
+time = "0.3.55"
+uuid = "1"
+x509-parser = { version = "0.18.1", default-features = false, features = ["verify-aws"] }
+
+axum = { version = "0.8", optional = true }
+axum-server = { version = "0.8", features = ["tls-rustls"], optional = true }
+futures-util = { version = "0.3", optional = true }
+tokio = { version = "1", optional = true }
+tokio-rustls = { version = "0.26", optional = true }
+tower-layer = { version = "0.3", optional = true }
+
+[dev-dependencies]
+rand = "0.10"
+ed25519-dalek = { version = "3.0.0", features = ["rand_core"] }
+uuid = { version = "1", features = ["v4"] }
