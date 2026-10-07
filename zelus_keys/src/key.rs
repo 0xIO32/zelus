@@ -38,6 +38,7 @@ pub struct DaemonRootKey {
 
 pub struct DaemonKey {
     pub id: Uuid,
+    pub server_name: String,
     pub privkey: PrivateKeyDer<'static>,
     pub cert: Vec<CertificateDer<'static>>,
     pub tls_cert: Arc<CertifiedKey>,
@@ -114,13 +115,14 @@ pub enum DaemonRootKeyError {
 impl DaemonRootKey {
     pub fn new(
         keypair: &KeyPair,
+        common_name: &str,
         user_key: Option<VerifyingKey>,
     ) -> Result<Self, DaemonRootKeyError> {
         let mut params = CertificateParams::default();
         params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
 
         let mut ca_name = DistinguishedName::new();
-        ca_name.push(DnType::CommonName, crate::ROOT_KEY_COMMON_NAME);
+        ca_name.push(DnType::CommonName, common_name);
 
         params.distinguished_name = ca_name;
 
@@ -280,18 +282,18 @@ impl DaemonRootKey {
         &self,
         root_keypair: &KeyPair,
         public_key: PublicKey,
+        prefix: &str,
         identifier: Uuid,
     ) -> Result<CertificateDer<'static>, rcgen::Error> {
+        let name = server_name(prefix, identifier);
         let mut params = CertificateParams::default();
         params
             .distinguished_name
-            .push(DnType::CommonName, format!("node-{identifier}"));
+            .push(DnType::CommonName, name.clone());
 
         params
             .subject_alt_names
-            .push(SanType::DnsName(Ia5String::try_from(format!(
-                "node-{identifier}"
-            ))?));
+            .push(SanType::DnsName(Ia5String::try_from(name)?));
 
         params.key_usages.push(KeyUsagePurpose::DigitalSignature);
         params
@@ -312,11 +314,12 @@ impl DaemonRootKey {
         &self,
         root_keypair: &KeyPair,
         keypair: &KeyPair,
+        common_name: &str,
     ) -> Result<BackendKey, BackendKeyError> {
         let mut params = CertificateParams::default();
 
         let mut backend_name = DistinguishedName::new();
-        backend_name.push(DnType::CommonName, crate::BACKEND_KEY_COMMON_NAME);
+        backend_name.push(DnType::CommonName, common_name);
 
         params.distinguished_name = backend_name;
 
@@ -418,6 +421,7 @@ impl DaemonKey {
         root: &DaemonRootKey,
         signed: CertificateDer<'static>,
         privkey: PrivateKeyDer<'static>,
+        prefix: &str,
     ) -> Result<Self, DaemonKeyError> {
         let tls_certificate = vec![signed.clone(), root.tls_ca.clone()];
 
@@ -431,37 +435,30 @@ impl DaemonKey {
 
         let (_, x509) = x509_parser::parse_x509_certificate(tls_cert.end_entity_cert()?)?;
 
-        let common_name = x509
-            .subject
-            .iter_common_name()
-            .next()
-            .ok_or(DaemonKeyError::Invalid)?;
-        let common_name = common_name.as_str().map_err(asn1_rs::Err::Error)?;
-
-        let id = common_name
-            .strip_prefix("node-")
-            .ok_or(DaemonKeyError::Invalid)?;
+        let (id, server_name) = identity(&x509, prefix)?;
 
         Ok(Self {
-            id: Uuid::from_str(id).map_err(|_err| DaemonKeyError::Invalid)?,
+            id,
+            server_name,
             privkey,
             cert: vec![signed],
             tls_cert: Arc::new(tls_cert),
         })
     }
 
-    pub fn new_temp(keypair: &KeyPair) -> Result<Self, DaemonKeyError> {
+    pub fn new_temp(keypair: &KeyPair, prefix: &str) -> Result<Self, DaemonKeyError> {
         let id = Uuid::nil();
+        let server_name = server_name(prefix, id);
 
         let mut distinguished_name = DistinguishedName::new();
-        distinguished_name.push(DnType::CommonName, format!("node-{id}"));
+        distinguished_name.push(DnType::CommonName, server_name.clone());
 
         let mut params = CertificateParams::default();
         params.distinguished_name = distinguished_name;
 
         params
             .subject_alt_names
-            .push(SanType::DnsName(Ia5String::try_from(format!("node-{id}"))?));
+            .push(SanType::DnsName(Ia5String::try_from(server_name.clone())?));
 
         params.not_after = OffsetDateTime::now_utc().saturating_add(Duration::minutes(30));
         params.not_before = OffsetDateTime::now_utc();
@@ -480,6 +477,7 @@ impl DaemonKey {
 
         Ok(Self {
             id,
+            server_name,
             privkey,
             cert: vec![cert],
             tls_cert: Arc::new(tls_cert),
@@ -488,9 +486,10 @@ impl DaemonKey {
 
     pub fn new_request(
         keypair: &KeyPair,
+        prefix: &str,
     ) -> Result<CertificateSigningRequestDer<'static>, rcgen::Error> {
         let mut distinguished_name = DistinguishedName::new();
-        distinguished_name.push(DnType::CommonName, "node");
+        distinguished_name.push(DnType::CommonName, prefix);
 
         let mut params = CertificateParams::default();
         params.distinguished_name = distinguished_name;
@@ -513,7 +512,11 @@ impl DaemonKey {
         x509
     }
 
-    pub fn parse<D: AsRef<[u8]>>(root: &DaemonRootKey, data: D) -> Result<Self, DaemonKeyError> {
+    pub fn parse<D: AsRef<[u8]>>(
+        root: &DaemonRootKey,
+        data: D,
+        prefix: &str,
+    ) -> Result<Self, DaemonKeyError> {
         let data = data.as_ref();
         let cert = CertificateDer::pem_slice_iter(data).collect::<Result<Vec<_>, _>>()?;
 
@@ -540,19 +543,11 @@ impl DaemonKey {
             return Err(DaemonKeyError::Invalid);
         }
 
-        let common_name = x509
-            .subject
-            .iter_common_name()
-            .next()
-            .ok_or(DaemonKeyError::Invalid)?;
-        let common_name = common_name.as_str().map_err(asn1_rs::Err::Error)?;
-
-        let id = common_name
-            .strip_prefix("node-")
-            .ok_or(DaemonKeyError::Invalid)?;
+        let (id, server_name) = identity(&x509, prefix)?;
 
         Ok(Self {
-            id: Uuid::from_str(id).map_err(|_err| DaemonKeyError::Invalid)?,
+            id,
+            server_name,
             privkey,
             cert,
             tls_cert: Arc::new(tls_cert),
@@ -574,8 +569,47 @@ impl DaemonKey {
     }
 }
 
+#[must_use]
+pub fn server_name(prefix: &str, id: Uuid) -> String {
+    format!("{prefix}-{id}")
+}
+
+fn identity(x509: &X509Certificate<'_>, prefix: &str) -> Result<(Uuid, String), DaemonKeyError> {
+    let common_name = x509
+        .subject
+        .iter_common_name()
+        .next()
+        .ok_or(DaemonKeyError::Invalid)?
+        .as_str()
+        .map_err(asn1_rs::Err::Error)?;
+
+    let id = common_name
+        .strip_prefix(prefix)
+        .and_then(|rest| rest.strip_prefix('-'))
+        .ok_or(DaemonKeyError::Invalid)?;
+    let id = Uuid::from_str(id).map_err(|_err| DaemonKeyError::Invalid)?;
+
+    Ok((id, common_name.to_owned()))
+}
+
 #[derive(Debug)]
-pub struct DaemonKeyVerifier(pub Uuid, pub Arc<dyn ServerCertVerifier>);
+pub struct DaemonKeyVerifier {
+    server_name: ServerName<'static>,
+    inner: Arc<dyn ServerCertVerifier>,
+}
+
+impl DaemonKeyVerifier {
+    pub fn new(
+        prefix: &str,
+        id: Uuid,
+        inner: Arc<dyn ServerCertVerifier>,
+    ) -> Result<Self, rustls::pki_types::InvalidDnsNameError> {
+        Ok(Self {
+            server_name: ServerName::DnsName(DnsName::try_from(server_name(prefix, id))?),
+            inner,
+        })
+    }
+}
 
 impl ServerCertVerifier for DaemonKeyVerifier {
     fn verify_server_cert(
@@ -586,12 +620,10 @@ impl ServerCertVerifier for DaemonKeyVerifier {
         ocsp_response: &[u8],
         now: UnixTime,
     ) -> Result<ServerCertVerified, Error> {
-        self.1.verify_server_cert(
+        self.inner.verify_server_cert(
             end_entity,
             intermediates,
-            &ServerName::DnsName(
-                DnsName::try_from(format!("node-{}", self.0)).expect("Unable to parse dns name"),
-            ),
+            &self.server_name,
             ocsp_response,
             now,
         )
@@ -603,7 +635,7 @@ impl ServerCertVerifier for DaemonKeyVerifier {
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
-        self.1.verify_tls12_signature(message, cert, dss)
+        self.inner.verify_tls12_signature(message, cert, dss)
     }
 
     fn verify_tls13_signature(
@@ -612,11 +644,11 @@ impl ServerCertVerifier for DaemonKeyVerifier {
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
-        self.1.verify_tls13_signature(message, cert, dss)
+        self.inner.verify_tls13_signature(message, cert, dss)
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        self.1.supported_verify_schemes()
+        self.inner.supported_verify_schemes()
     }
 }
 
@@ -642,7 +674,7 @@ mod tests {
         let user_key = SigningKey::generate(&mut rand::rng());
         let public_user_key = user_key.verifying_key();
 
-        let root = DaemonRootKey::new(&ca, Some(public_user_key)).unwrap();
+        let root = DaemonRootKey::new(&ca, "Test CA", Some(public_user_key)).unwrap();
 
         let root_dumped_priv = root.dump(Some(&ca), Some(&user_key));
         let root_parsed_priv = DaemonRootKey::parse(&root_dumped_priv).unwrap();
@@ -668,7 +700,9 @@ mod tests {
 
         // Backend key
         let backend_keypair = KeyPair::generate().unwrap();
-        let backend_key = root.new_backend_key(&ca, &backend_keypair).unwrap();
+        let backend_key = root
+            .new_backend_key(&ca, &backend_keypair, "Test Backend")
+            .unwrap();
         let backend_dumped = backend_key.dump();
         let backend_parsed = BackendKey::parse(&root, backend_dumped.as_bytes()).unwrap();
 
@@ -680,21 +714,21 @@ mod tests {
         let node_id = Uuid::new_v4();
 
         let node_keypair = KeyPair::generate().unwrap();
-        let node_req = DaemonKey::new_request(&node_keypair).unwrap();
+        let node_req = DaemonKey::new_request(&node_keypair, "node").unwrap();
 
         let node_req = CertificateSigningRequestParams::from_der(&node_req).unwrap();
 
         let node_cert = root
-            .sign_daemon_key(&ca, node_req.public_key, node_id)
+            .sign_daemon_key(&ca, node_req.public_key, "node", node_id)
             .unwrap();
         let node_privkey = PrivateKeyDer::try_from(node_keypair.serialize_der()).unwrap();
 
-        let node_key = DaemonKey::new(&root, node_cert, node_privkey).unwrap();
+        let node_key = DaemonKey::new(&root, node_cert, node_privkey, "node").unwrap();
 
         assert_eq!(node_key.id, node_id);
 
         let node_key_dumped = node_key.dump();
-        let node_key_parsed = DaemonKey::parse(&root, node_key_dumped.as_bytes()).unwrap();
+        let node_key_parsed = DaemonKey::parse(&root, node_key_dumped.as_bytes(), "node").unwrap();
 
         assert_eq!(node_key_parsed.privkey, node_key.privkey);
         assert_eq!(node_key_parsed.tls_cert.cert, node_key.tls_cert.cert);

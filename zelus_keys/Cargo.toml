@@ -15,6 +15,7 @@ server = [
     "dep:tokio-rustls",
     "dep:tower-layer",
 ]
+setup = ["server", "dep:reqwest", "dep:serde", "dep:url", "tokio/time"]
 
 [lints]
 workspace = true
@@ -36,6 +37,9 @@ futures-util = { version = "0.3", optional = true }
 tokio = { version = "1", optional = true }
 tokio-rustls = { version = "0.26", optional = true }
 tower-layer = { version = "0.3", optional = true }
+reqwest = { version = "0.13", default-features = false, features = ["json"], optional = true }
+serde = { version = "1.0", optional = true }
+url = { version = "2.5", optional = true }
 
 [dev-dependencies]
 rand = "0.10"

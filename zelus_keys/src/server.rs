@@ -27,7 +27,7 @@ impl CertResolver {
     pub fn new(key: &DaemonKey) -> Self {
         Self {
             key: Arc::clone(&key.tls_cert),
-            server_name: format!("node-{}", key.id),
+            server_name: key.server_name.clone(),
             fallback: None,
         }
     }
